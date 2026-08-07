@@ -68,6 +68,9 @@ export class ChatApiTsStack extends cdk.Stack {
 
     const agentStreamLambda = new apigateway.LambdaIntegration(
       agentStreamFunction,
+      {
+        responseTransferMode: apigateway.ResponseTransferMode.STREAM,
+      },
     );
 
     const v1 = api.root.addResource('v1');
