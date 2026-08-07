@@ -37,7 +37,6 @@ async def invoke(payload, context) -> AsyncGenerator[BaseEvent]:
 
         model = BedrockModel(
             model_id=os.getenv("MODEL_ID", "eu.anthropic.claude-sonnet-5"),
-            temperature=float(os.getenv("MODEL_TEMPERATURE", "0.0")),
             max_tokens=int(os.getenv("MODEL_MAX_TOKENS", "4000")),
         )
 
