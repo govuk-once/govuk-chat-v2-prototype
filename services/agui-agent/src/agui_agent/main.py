@@ -37,7 +37,6 @@ async def invoke(payload, context) -> AsyncGenerator[BaseEvent]:
 
         model = BedrockModel(
             model_id=os.getenv("MODEL_ID", "eu.anthropic.claude-sonnet-5"),
-            temperature=float(os.getenv("MODEL_TEMPERATURE", "0.0")),
             max_tokens=int(os.getenv("MODEL_MAX_TOKENS", "4000")),
         )
 
@@ -64,12 +63,15 @@ async def invoke(payload, context) -> AsyncGenerator[BaseEvent]:
             config=agent_config,
         )
 
+        messages = payload.get("messages") or []
+        user_content = messages[0]["content"] if messages else None
+
         input_data = {
             "thread_id": session_id,
             "run_id": "run-456",
             "state": {},
             "messages": [
-                {"role": "user", "content": payload.get("prompt"), "id": "msg-1"}
+                {"role": "user", "content": user_content, "id": "msg-1"}
             ],
             "tools": [],
             "context": [],
