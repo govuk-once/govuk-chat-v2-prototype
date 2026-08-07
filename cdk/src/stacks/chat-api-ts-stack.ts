@@ -79,8 +79,8 @@ export class ChatApiTsStack extends cdk.Stack {
     const helloWorld = v1.addResource('hello-world');
     helloWorld.addMethod('GET', helloWorldLambda);
 
-    // POST /v1/agent-stream
-    const agentStream = v1.addResource('agent-stream');
+    // POST /v1/threads/invoke
+    const agentStream = v1.addResource('threads').addResource('invoke');
     agentStream.addMethod('POST', agentStreamLambda);
 
     return api;
@@ -104,6 +104,9 @@ export class ChatApiTsStack extends cdk.Stack {
         `services/chat-api-ts/src/handlers/${handlerPath}`,
       ),
       handler: 'handler',
+      bundling: {
+        externalModules: [],
+      },
     });
   }
 }
