@@ -8,6 +8,7 @@ import {
   RunAgentInputSchema,
   ClientInputHeadersSchema,
 } from '../../schemas/client-input.ts';
+import { parseRequestBody, validateRequestBody } from '../../http/body.ts';
 import { streamedJsonErrorResponse } from '../../http/errors.ts';
 import { lowercaseHeaders } from '../../http/headers.ts';
 import { relayAgentEventStream } from '../../streaming/agent-event-stream.ts';
@@ -41,32 +42,25 @@ export const handler = awslambda.streamifyResponse(
 
     const endUserId = parsedHeader.data['end-user-id'];
 
-    // TODO: Extract request body parsing/validation into a shared helper if
-    // other handlers end up needing the same JSON parsing + Zod validation.
-    let rawBody: unknown;
-    try {
-      rawBody = event.body ? JSON.parse(event.body) : {};
-    } catch (error) {
-      // JSON parsing errors throw SyntaxErrors
-      if (!(error instanceof SyntaxError)) {
-        throw error;
-      }
-      // TODO: log error here
+    const jsonResult = parseRequestBody(event.body);
+    if (!jsonResult.success) {
       return streamedJsonErrorResponse(responseStream, 400, {
         error: 'Invalid JSON in request body',
       });
     }
 
-    const parseResult = RunAgentInputSchema.safeParse(rawBody);
-    if (!parseResult.success) {
-      // TODO: log error here
+    const bodyResult = validateRequestBody(
+      jsonResult.data,
+      RunAgentInputSchema,
+    );
+    if (!bodyResult.success) {
       return streamedJsonErrorResponse(responseStream, 422, {
         error: 'Agent invocation error',
-        details: z.flattenError(parseResult.error),
+        details: bodyResult.details,
       });
     }
 
-    const body = parseResult.data;
+    const body = bodyResult.data;
     const runId = body.runId;
 
     const payload = {
