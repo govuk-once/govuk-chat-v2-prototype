@@ -1,18 +1,25 @@
-import type { Writable } from 'node:stream';
+import { Readable } from 'node:stream';
+import middy from '@middy/core';
+import { executionModeStreamifyResponse } from '@middy/core/StreamifyResponse';
+import httpHeaderNormalizer from '@middy/http-header-normalizer';
+import httpJsonBodyParser from '@middy/http-json-body-parser';
 import {
   BedrockAgentCoreClient,
   InvokeAgentRuntimeCommand,
 } from '@aws-sdk/client-bedrock-agentcore';
-import type { APIGatewayProxyEvent } from 'aws-lambda';
 import {
   RunAgentInputSchema,
   ClientInputHeadersSchema,
 } from '../../schemas/client-input.ts';
-import { parseRequestBody, validateRequestBody } from '../../http/body.ts';
-import { streamedJsonErrorResponse } from '../../http/errors.ts';
-import { lowercaseHeaders } from '../../http/headers.ts';
+import {
+  zodBodyValidator,
+  zodHeadersValidator,
+} from '../../http/zod-validator.ts';
+import {
+  buildJsonErrorResponse,
+  type JsonErrorResponse,
+} from '../../http/errors.ts';
 import { relayAgentEventStream } from '../../streaming/agent-event-stream.ts';
-import { z } from 'zod';
 
 const agentRuntimeArn = process.env.AGENT_RUNTIME_ARN;
 if (!agentRuntimeArn) {
@@ -21,97 +28,77 @@ if (!agentRuntimeArn) {
 
 const client = new BedrockAgentCoreClient({});
 
-export const handler = awslambda.streamifyResponse(
-  async (
-    event: APIGatewayProxyEvent,
-    responseStream: Writable,
-  ): Promise<void> => {
-    // TODO: Make this optional so we can toggle it off in dev mode.
-    const parsedHeader = ClientInputHeadersSchema.safeParse(
-      // Doing manual header normalisation isn't ideal. We will likely replace
-      // this with something down the line. For example, middy handles header
-      // normalisation.
-      lowercaseHeaders(event.headers),
-    );
-    if (!parsedHeader.success) {
-      return streamedJsonErrorResponse(responseStream, 422, {
-        error: 'Agent invocation error',
-        details: z.flattenError(parsedHeader.error),
-      });
-    }
+interface AgentEventStreamResponse {
+  statusCode: number;
+  headers: Record<string, string>;
+  body: Readable;
+}
 
-    const endUserId = parsedHeader.data['end-user-id'];
+export const handler = middy({
+  executionMode: executionModeStreamifyResponse,
+})
+  .use(httpHeaderNormalizer())
+  .use(zodHeadersValidator(ClientInputHeadersSchema))
+  .use(httpJsonBodyParser())
+  .use(zodBodyValidator(RunAgentInputSchema))
+  // Registered after the middleware so the event type it receives is the one
+  // the chain produces - a parsed, validated body and headers. Registering it
+  // first would make that an assumption rather than something the compiler
+  // checks.
+  .handler(
+    async (event): Promise<AgentEventStreamResponse | JsonErrorResponse> => {
+      const endUserId = event.headers['end-user-id'];
+      const body = event.body;
 
-    const jsonResult = parseRequestBody(event.body);
-    if (!jsonResult.success) {
-      return streamedJsonErrorResponse(responseStream, 400, {
-        error: 'Invalid JSON in request body',
-      });
-    }
+      const payload = {
+        threadId: body.threadId,
+        runId: body.runId,
+        state: body.state ?? {},
+        messages: body.messages ?? [],
+        tools: body.tools ?? [],
+        context: body.context ?? [],
+        forwardedProps: { endUserId },
+      };
 
-    const bodyResult = validateRequestBody(
-      jsonResult.data,
-      RunAgentInputSchema,
-    );
-    if (!bodyResult.success) {
-      return streamedJsonErrorResponse(responseStream, 422, {
-        error: 'Agent invocation error',
-        details: bodyResult.details,
-      });
-    }
+      let response;
+      try {
+        const command = new InvokeAgentRuntimeCommand({
+          agentRuntimeArn,
+          runtimeSessionId: body.threadId,
+          contentType: 'application/json',
+          accept: 'text/event-stream',
+          qualifier: 'DEFAULT',
+          payload: JSON.stringify(payload),
+        });
 
-    const body = bodyResult.data;
-    const runId = body.runId;
-
-    const payload = {
-      threadId: body.threadId,
-      runId,
-      state: body.state ?? {},
-      messages: body.messages ?? [],
-      tools: body.tools ?? [],
-      context: body.context ?? [],
-      forwardedProps: { endUserId },
-    };
-
-    let response;
-    try {
-      const command = new InvokeAgentRuntimeCommand({
-        agentRuntimeArn,
-        runtimeSessionId: body.threadId,
-        contentType: 'application/json',
-        accept: 'text/event-stream',
-        qualifier: 'DEFAULT',
-        payload: JSON.stringify(payload),
-      });
-
-      response = await client.send(command);
+        response = await client.send(command);
+      } catch {
+        // TODO: Log error here.
+        return buildJsonErrorResponse(500, { error: 'Agent invocation error' });
+      }
 
       // The SDK types 'response.response' as optional, so we guard against
       // it being absent even though the runtime should always return a body.
       if (!response.response) {
         // TODO: Log error here.
-        throw new Error('Agent invocation error');
+        return buildJsonErrorResponse(500, { error: 'Agent invocation error' });
       }
-    } catch {
-      // TODO: Log error here.
-      return streamedJsonErrorResponse(responseStream, 500, {
-        error: 'Agent invocation error',
-      });
-    }
 
-    const sseStream = awslambda.HttpResponseStream.from(responseStream, {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-      },
-    });
+      const sseStream = Readable.from(
+        relayAgentEventStream({
+          source: response.response as AsyncIterable<Uint8Array>,
+          threadId: body.threadId,
+          runId: body.runId,
+        }),
+      );
 
-    await relayAgentEventStream({
-      source: response.response as AsyncIterable<Uint8Array>,
-      destination: sseStream,
-      threadId: body.threadId,
-      runId,
-    });
-  },
-);
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+        },
+        body: sseStream,
+      };
+    },
+  );

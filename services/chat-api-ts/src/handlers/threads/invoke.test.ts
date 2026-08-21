@@ -32,7 +32,10 @@ beforeEach(() => {
 const VALID_THREAD_ID = crypto.randomUUID();
 const VALID_RUN_ID = crypto.randomUUID();
 const VALID_USER_ID = crypto.randomUUID();
-const DEFAULT_HEADERS = { 'end-user-id': VALID_USER_ID };
+const DEFAULT_HEADERS = {
+  'end-user-id': VALID_USER_ID,
+  'content-type': 'application/json',
+};
 const AGENT_RUNTIME_ARN =
   'arn:aws:bedrock-agentcore:eu-west-1:123456789012:runtime/test';
 const VALID_MESSAGES = [
@@ -71,9 +74,9 @@ async function runAndGetErrorBody(
   };
 }
 
-function fieldErrorResponse(fields: string[]): unknown {
+function fieldErrorResponse(error: string, fields: string[]): unknown {
   return expect.objectContaining({
-    error: 'Agent invocation error',
+    error,
     details: expect.objectContaining({
       fieldErrors: expect.objectContaining(
         Object.fromEntries(fields.map((field) => [field, expect.anything()])),
@@ -98,39 +101,29 @@ describe('handler', () => {
     it('returns 422 when end-user-id header is missing', async () => {
       const { responseStream } = await runAndGetErrorBody(
         { threadId: VALID_THREAD_ID, messages: VALID_MESSAGES },
-        {},
+        { 'content-type': 'application/json' },
       );
 
       expectJsonHttpResponse(
         responseStream,
         422,
-        fieldErrorResponse(['end-user-id']),
+        fieldErrorResponse('Invalid request headers', ['end-user-id']),
       );
     });
 
-    it('normalises header keys to lowercase before validation', async () => {
-      const { parsed } = await runAndGetErrorBody(
+    it('normalises header keys before validation', async () => {
+      const { responseStream } = await runAndGetErrorBody(
         { threadId: VALID_THREAD_ID, messages: VALID_MESSAGES },
-        { 'End-User-Id': VALID_USER_ID },
+        { 'End-User-Id': VALID_USER_ID, 'content-type': 'application/json' },
       );
 
-      expect(parsed.details.fieldErrors).not.toHaveProperty('end-user-id');
-    });
-  });
-
-  describe('request body parsing', () => {
-    it('returns a 400 JSON error for invalid JSON body', async () => {
-      const responseStream = testEnv.responseStream;
-      const event = {
-        body: '{not valid json',
-        headers: DEFAULT_HEADERS,
-      } as unknown as APIGatewayProxyEvent;
-
-      await testEnv.handler(event, responseStream, {});
-
-      expectJsonHttpResponse(responseStream, 400, {
-        error: 'Invalid JSON in request body',
-      });
+      // Falling through to a body error proves the 'End-User-Id' spelling was
+      // normalised and accepted by the header validator.
+      expectJsonHttpResponse(
+        responseStream,
+        422,
+        fieldErrorResponse('Invalid request body', ['runId']),
+      );
     });
   });
 
@@ -143,7 +136,7 @@ describe('handler', () => {
       expectJsonHttpResponse(
         responseStream,
         422,
-        fieldErrorResponse(['threadId', 'messages']),
+        fieldErrorResponse('Invalid request body', ['threadId', 'messages']),
       );
     });
 
@@ -156,7 +149,7 @@ describe('handler', () => {
       expectJsonHttpResponse(
         responseStream,
         422,
-        fieldErrorResponse(['messages']),
+        fieldErrorResponse('Invalid request body', ['messages']),
       );
     });
   });

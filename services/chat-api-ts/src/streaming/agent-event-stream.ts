@@ -1,4 +1,3 @@
-import type { Writable } from 'node:stream';
 import {
   EventType,
   type RunErrorEvent,
@@ -11,16 +10,21 @@ const textDecoder = new TextDecoder('utf-8');
 
 export interface RelayAgentEventStreamParameters {
   source: AsyncIterable<Uint8Array>;
-  destination: Writable;
   threadId: string;
   runId: string;
 }
-export async function relayAgentEventStream({
+
+/**
+ * Relays an AG-UI SSE byte stream from an agent runtime, yielding each chunk
+ * as it arrives. If the source stream fails, emits a synthetic RUN_STARTED
+ * (unless one was already seen) followed by a RUN_ERROR event so the client
+ * always receives a well-formed run.
+ */
+export async function* relayAgentEventStream({
   source,
-  destination,
   threadId,
   runId,
-}: RelayAgentEventStreamParameters): Promise<void> {
+}: RelayAgentEventStreamParameters): AsyncGenerator<string> {
   let isRunStarted = false;
 
   try {
@@ -43,12 +47,10 @@ export async function relayAgentEventStream({
         }
       }
 
-      destination.write(sseChunk);
+      yield sseChunk;
     }
   } catch {
     // TODO: Log error here.
-    // TODO: Look into if we should raise an error after we've finished writing to
-    // the destination.
     const errorEvent: RunErrorEvent = {
       type: EventType.RUN_ERROR,
       message: 'Agent invocation error',
@@ -60,11 +62,9 @@ export async function relayAgentEventStream({
         threadId,
         runId,
       };
-      destination.write(encoder.encodeSSE(startEvent));
+      yield encoder.encodeSSE(startEvent);
     }
 
-    destination.write(encoder.encodeSSE(errorEvent));
-  } finally {
-    destination.end();
+    yield encoder.encodeSSE(errorEvent);
   }
 }
