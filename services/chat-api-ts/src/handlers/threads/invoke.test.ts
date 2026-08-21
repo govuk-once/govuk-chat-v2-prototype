@@ -127,6 +127,41 @@ describe('handler', () => {
     });
   });
 
+  describe('request body parsing', () => {
+    // Middy's JSON body parser reports malformed JSON as a 422 rather than the
+    // 400 the handler used to return.
+    it('returns a 422 for a malformed JSON body', async () => {
+      const responseStream = testEnv.responseStream;
+      const event = {
+        body: '{not valid json',
+        headers: DEFAULT_HEADERS,
+      } as unknown as APIGatewayProxyEvent;
+
+      await testEnv.handler(event, responseStream, {});
+
+      expectJsonHttpResponse(responseStream, 422, {
+        error: 'Invalid or malformed JSON was provided',
+      });
+    });
+
+    it('returns 415 when Content-Type is missing or not JSON', async () => {
+      const responseStream = testEnv.responseStream;
+
+      await testEnv.handler(
+        makeEvent(
+          { threadId: VALID_THREAD_ID, messages: VALID_MESSAGES },
+          { 'end-user-id': VALID_USER_ID },
+        ),
+        responseStream,
+        {},
+      );
+
+      expectJsonHttpResponse(responseStream, 415, {
+        error: 'Unsupported Media Type',
+      });
+    });
+  });
+
   describe('request body validation', () => {
     it('returns 422 with validation details when schema validation occurs', async () => {
       const { responseStream } = await runAndGetErrorBody({

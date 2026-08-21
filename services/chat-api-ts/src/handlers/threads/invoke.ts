@@ -17,6 +17,7 @@ import {
 } from '../../http/zod-validator.ts';
 import {
   buildJsonErrorResponse,
+  jsonHttpErrorHandler,
   type JsonErrorResponse,
 } from '../../http/errors.ts';
 import { relayAgentEventStream } from '../../streaming/agent-event-stream.ts';
@@ -41,6 +42,7 @@ export const handler = middy({
   .use(zodHeadersValidator(ClientInputHeadersSchema))
   .use(httpJsonBodyParser())
   .use(zodBodyValidator(RunAgentInputSchema))
+  .use(jsonHttpErrorHandler())
   // Registered after the middleware so the event type it receives is the one
   // the chain produces - a parsed, validated body and headers. Registering it
   // first would make that an assumption rather than something the compiler
