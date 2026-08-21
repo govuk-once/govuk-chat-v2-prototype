@@ -16,6 +16,9 @@
     "@ag-ui/core": "^0.0.57",
     "@ag-ui/encoder": "^0.0.57",
     "@aws-sdk/client-bedrock-agentcore": "^3.1104.0",
+    "@middy/core": "^7.8.0",
+    "@middy/http-header-normalizer": "^7.8.0",
+    "@middy/http-json-body-parser": "^7.8.0",
     "zod": "^4.4.3"
   }
 }

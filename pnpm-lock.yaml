@@ -68,6 +68,15 @@ importers:
       '@aws-sdk/client-bedrock-agentcore':
         specifier: ^3.1104.0
         version: 3.1107.0
+      '@middy/core':
+        specifier: ^7.8.0
+        version: 7.8.0
+      '@middy/http-header-normalizer':
+        specifier: ^7.8.0
+        version: 7.8.0
+      '@middy/http-json-body-parser':
+        specifier: ^7.8.0
+        version: 7.8.0
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -559,6 +568,27 @@ packages:
 
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
+
+  '@middy/core@7.8.0':
+    resolution: {integrity: sha512-RKRv+T4WoBzretyiaIL4Act1RJOLwcYLXYagRv7vKC0NJmbz1rr6+ZLOXgrQAjtVgUOInaJd7cT9g7iuwiKwPA==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@aws/durable-execution-sdk-js': ^2.0.0
+    peerDependenciesMeta:
+      '@aws/durable-execution-sdk-js':
+        optional: true
+
+  '@middy/http-header-normalizer@7.8.0':
+    resolution: {integrity: sha512-n0uQC+IHOxZ2p+27gOL4kILE8pfmBjstgGAsmRMEtBR8GmBBqMD4ZaLQ01F7/9nEndL3UkxuJgQzRYmyPuthQQ==}
+    engines: {node: '>=22'}
+
+  '@middy/http-json-body-parser@7.8.0':
+    resolution: {integrity: sha512-2uEi6mRSea+jhCWSmVxvMTdFeYeqfBR+EdE868dFfhCxjmNc0dAM6/7zsKmt3IlrHJdTE3u/fJTIb1i4tOxvNQ==}
+    engines: {node: '>=22'}
+
+  '@middy/util@7.8.0':
+    resolution: {integrity: sha512-LObrvOI9m8Y11XzqhS0iFB+AZHis8GsQ6+12LOkOrFajAaRi/r18RErvDa0TSKMDBHEy1kdgDD6fP3V0QErecA==}
+    engines: {node: '>=22'}
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     resolution: {integrity: sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ==}
@@ -1878,6 +1908,20 @@ snapshots:
   '@humanwhocodes/retry@0.4.3': {}
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
+
+  '@middy/core@7.8.0':
+    dependencies:
+      '@middy/util': 7.8.0
+
+  '@middy/http-header-normalizer@7.8.0':
+    dependencies:
+      '@middy/util': 7.8.0
+
+  '@middy/http-json-body-parser@7.8.0':
+    dependencies:
+      '@middy/util': 7.8.0
+
+  '@middy/util@7.8.0': {}
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
