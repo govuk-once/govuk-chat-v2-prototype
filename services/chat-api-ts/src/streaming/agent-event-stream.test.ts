@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   EventType,
   type RunErrorEvent,
@@ -10,6 +10,11 @@ import {
   createFailingStream,
   createResponseStream,
 } from '../test-utils/agent-stream.ts';
+
+// Declared via vi.hoisted so the spy exists before the report mock.
+const { reportError } = vi.hoisted(() => ({ reportError: vi.fn() }));
+vi.mock('../logging/report.ts', () => ({ reportError }));
+
 import { relayAgentEventStream } from './agent-event-stream.ts';
 
 const THREAD_ID = crypto.randomUUID();
@@ -60,6 +65,14 @@ describe('relayAgentEventStream', () => {
       encoder.encode(expectedStartEvent) + encoder.encode(expectedErrorEvent),
     );
     expect(destination.end).toHaveBeenCalledOnce();
+    expect(reportError).toHaveBeenCalledWith(
+      'Agent event stream relay failed',
+      {
+        error: new Error('Stream failure'),
+        threadId: THREAD_ID,
+        runId: RUN_ID,
+      },
+    );
   });
 
   it('does not duplicate RUN_STARTED when the source fails after RUN_STARTED was already relayed', async () => {
@@ -86,5 +99,13 @@ describe('relayAgentEventStream', () => {
       encoder.encode(runStartedEvent) + encoder.encode(expectedErrorEvent),
     );
     expect(destination.end).toHaveBeenCalledOnce();
+    expect(reportError).toHaveBeenCalledWith(
+      'Agent event stream relay failed',
+      {
+        error: new Error('Stream failure'),
+        threadId: THREAD_ID,
+        runId: RUN_ID,
+      },
+    );
   });
 });

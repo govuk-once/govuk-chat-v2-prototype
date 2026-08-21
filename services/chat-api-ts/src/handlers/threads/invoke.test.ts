@@ -14,6 +14,16 @@ import {
   type ResponseStream,
 } from '../../test-utils/agent-stream.ts';
 
+// Declared via vi.hoisted so the spy exists before the report mock.
+const { reportError, reportWarning } = vi.hoisted(() => ({
+  reportError: vi.fn(),
+  reportWarning: vi.fn(),
+}));
+vi.mock('../../logging/report.ts', () => ({
+  reportError,
+  reportWarning,
+}));
+
 type HandlerFunction = (
   event: APIGatewayProxyEvent,
   responseStream: ResponseStream,
@@ -131,6 +141,11 @@ describe('handler', () => {
       expectJsonHttpResponse(responseStream, 400, {
         error: 'Invalid JSON in request body',
       });
+      expect(reportWarning).toHaveBeenCalledWith(
+        'Failed to parse request body as JSON',
+        { error: expect.any(SyntaxError) },
+      );
+      expect(reportError).not.toHaveBeenCalled();
     });
   });
 
@@ -145,6 +160,11 @@ describe('handler', () => {
         422,
         fieldErrorResponse(['threadId', 'messages']),
       );
+      expect(reportWarning).toHaveBeenCalledWith(
+        'Request body failed schema validation',
+        { error: expect.anything() },
+      );
+      expect(reportError).not.toHaveBeenCalled();
     });
 
     it('returns 422 with validation details when schema validation occurs for nested fields', async () => {
@@ -237,7 +257,8 @@ describe('handler', () => {
     describe('pre-stream failures', () => {
       it('returns a 500 JSON error when runtime client invocation fails before opening stream', async () => {
         const responseStream = testEnv.responseStream;
-        send.mockRejectedValueOnce(new Error('Error from agent runtime'));
+        const runtimeError = new Error('Error from agent runtime');
+        send.mockRejectedValueOnce(runtimeError);
 
         await testEnv.handler(
           makeEvent({
@@ -252,6 +273,14 @@ describe('handler', () => {
         expectJsonHttpResponse(responseStream, 500, {
           error: 'Agent invocation error',
         });
+        expect(reportError).toHaveBeenCalledWith(
+          'Agent runtime invocation failed',
+          {
+            error: runtimeError,
+            threadId: VALID_THREAD_ID,
+            runId: VALID_RUN_ID,
+          },
+        );
       });
 
       it('returns a 500 JSON error when no response body is returned from agent runtime', async () => {
@@ -271,6 +300,10 @@ describe('handler', () => {
         expectJsonHttpResponse(responseStream, 500, {
           error: 'Agent invocation error',
         });
+        expect(reportError).toHaveBeenCalledWith(
+          'Agent runtime returned no response body',
+          { threadId: VALID_THREAD_ID, runId: VALID_RUN_ID },
+        );
       });
     });
 
