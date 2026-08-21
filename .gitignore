@@ -19,8 +19,12 @@ cdk.out
 # local environment
 .bedrock_agentcore.yaml
 
-# AgentCore CLI local state, generated per developer by cdk-deploy.sh
+# AgentCore CLI local state, generated per developer by cdk-deploy.sh and
+# the local development tooling
+services/*/agentcore/.cli/
+services/*/agentcore/.cache/
 services/*/agentcore/cdk-outputs.json
+services/*/agentcore/aws-targets.json
 
 # Individual env vars
 .env
